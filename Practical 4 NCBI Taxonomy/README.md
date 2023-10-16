@@ -3,7 +3,7 @@
 1. Given a file **nodes.dmp** for the NCBI taxonomy, write a Python script to store it in a rooted tree. Give the code of your Python script as your answer to this question, using the $\LaTeX$ package **listings**.
 2. Is the NCBI taxonomy a rooted tree, a directed acyclic graph, or a directed graph with cycles?
 3. How many nodes are there in the NCBI taxonomy?
-4. Write a Python script to restrict the rooted tree to the seven standard taxonomic ranks: *kingdom*, *phylum*, *class*, *order*, *family*, *genus*, *species*. Give the code of your Python script as your answer to this question, using the$\LaTeX$ package **listings**.
+4. Write a Python script to restrict the rooted tree to the seven standard taxonomic ranks: *kingdom*, *phylum*, *class*, *order*, *family*, *genus*, *species*. Give the code of your Python script as your answer to this question, using the $\LaTeX$ package **listings**.
 5. What is the name of the *kingdom* taxonomic rank in the NCBI taxonomy?
 6. How many nodes are there in the NCBI taxonomy, once restricted to the seven standard taxonomic ranks?
 
