@@ -90,40 +90,46 @@ G.remove_edge(1,1)
 # Type of the graph
 print('Is it a tree? ', nx.is_tree(G))
 print('Is it directed? ', nx.is_directed(G))
-print('Is it rooted? ', nx.is_arborescence(G))
+print('Is it rooted? ', nx.is_arborescence(G)) # to check if it is rooted
 print('Is it a DAG? ', nx.is_directed_acyclic_graph(G))
 
 # The number of nodes
 print('The number of nodes: ', G.number_of_nodes())
 
-valid_ranks = ["kingdom", "phylum", "class", "order", "family", "genus", "species"]
+valid_ranks = ["superkingdom", "phylum", "class", "order", "family", "genus", "species"]
 
 # Nodes to remove
 not_nodes = [node for node, attrs in G.nodes(data=True) if not attrs['rank'] in valid_ranks]
 
-# Nodes to remove
-restricted_nodes = [node for node, attrs in G.nodes(data=True) if attrs['rank'] in valid_ranks]
-
 restricted_taxonomy = G.copy()
+restricted_taxonomy.add_edge(1,1)
 
-# Remove the info about the node 1 from these lists because it's a root
-not_nodes[0]
-not_nodes = not_nodes[1:]
+def delete_nodes_preserve_neighbors(graph, nodes_to_delete):
+    for node in nodes_to_delete:
+        list_succes = list(graph.successors(node)) 
+        list_pred = list(graph.predecessors(node))
+        if node != 1:
+            graph.remove_node(node)
+        for source in list_pred:
+            for target in list_succes:
+                if source != target and not graph.has_edge(source, target):
+                    graph.add_edge(source, target)
 
-#Lists of successors and predecessors for the nodes wich will be removed
-list_succes = [list(G.successors(i)) for i in not_nodes]
-list_pred = [list(G.predecessors(i)) for i in not_nodes]
+# We keep the node 1 (root) in order to have a structure of the tree 
 
-# Add edges from the destination node to the children
-restricted_taxonomy.add_edges_from([(list_pred[i][0], list_succes[i][j]) for i in range(1,len(list_succes)) for j in range(len(list_succes[i]))])
+delete_nodes_preserve_neighbors(restricted_taxonomy, not_nodes)
+restricted_taxonomy.remove_edge(1,1)
 
-# Restrict
-restricted_taxonomy = nx.subgraph(restricted_taxonomy, restricted_nodes)
+print('Is it a tree? ', nx.is_tree(restricted_taxonomy))
 
 # The number of nodes
 print('The number of nodes in the restricted version: ', restricted_taxonomy.number_of_nodes())
+print('The number of edges in the restricted version: ', restricted_taxonomy.number_of_edges())
 
-# The nodes with in-degree 0 and their ranks
-search_top = [(node, restricted_taxonomy.nodes[node]["rank"])  for node in restricted_taxonomy.nodes() if restricted_taxonomy.in_degree(node) == 0]
-search_top_list = [x[1] for x in search_top]
-unique_elements = [x for i, x in enumerate(search_top_list) if x not in search_top_list[:i]]
+
+# Search for the top taxonomic rank in the NCBI taxonomy
+print('Is it a DAG? ', nx.is_directed_acyclic_graph(restricted_taxonomy))
+
+long_path = nx.dag_longest_path(restricted_taxonomy)
+print('The rank of the top nodes is: ', restricted_taxonomy.nodes[long_path[1]]["rank"])
+
