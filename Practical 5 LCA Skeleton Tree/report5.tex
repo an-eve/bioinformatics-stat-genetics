@@ -106,10 +106,45 @@ for read_id, seq in lineages.items():
 
 print("{The LCAs for each read: \n", LCAs)
 \end{minted}
-The LCA for each read is the root.
+The LCA for each read is the root, so the taxonomic rank is "no rank".
 \item 
+\begin{minted}{python}
+sk_matching = {2759: 'eukaryota', 2: 'bacteria', 10239: 'viruses', 2157: 'archaea'}
+# Superkingdoms for each read
+Superkingdoms = {}
+for read_id, seq in lineages.items():
+    skingdoms_for_read ={}
+    skingdoms_for_read['others'] = 0
+    for l in seq:
+        if l[1] in sk_matching:
+            if sk_matching[l[1]] in skingdoms_for_read:
+                skingdoms_for_read[sk_matching[l[1]]] += 1
+            else:
+                skingdoms_for_read[sk_matching[l[1]]] = 1
+        else:
+            skingdoms_for_read['others'] += 1
+    Superkingdoms[read_id] = skingdoms_for_read
+print("The Superkingdoms for each read: \n")
+for read_id, sk_number in Superkingdoms.items():
+    print(f"The Superkingdoms for {read_id} read: {Superkingdoms[read_id]}")
+\end{minted}
+The Superkingdoms for R00010 read: 'others': 0, 'eukaryota': 8, 'bacteria': 2 \\
+The Superkingdoms for R00020 read: 'others': 0, 'eukaryota': 16, 'viruses': 1, 'bacteria': 3 \\
+The Superkingdoms for R00030 read: 'others': 0, 'eukaryota': 21, 'bacteria': 8, 'archaea': 1 \\
+The Superkingdoms for R00040 read: 'others': 0, 'eukaryota': 26, 'bacteria': 14 \\
+The Superkingdoms for R00050 read: 'others': 0, 'bacteria': 7, 'eukaryota': 42, 'viruses': 1 \\
+The Superkingdoms for R00060 read: 'others': 0, 'viruses': 3, 'eukaryota': 43, 'bacteria': 14 \\
+The Superkingdoms for R00070 read: 'others': 0, 'bacteria': 21, 'eukaryota': 49 \\
+The Superkingdoms for R00080 read: 'others': 1, 'eukaryota': 57, 'bacteria': 20, 'viruses': 2 \\
+The Superkingdoms for R00090 read: 'others': 1, 'eukaryota': 59, 'archaea': 2, 'bacteria': 21, 'viruses': 7 \\
+The Superkingdoms for R00100 read: 'others': 1, 'eukaryota': 79, 'bacteria': 19, 'archaea': 1 \\
+
+For every readID, the most frequent type of living organism in the lineage is the eukaryota. But there is no a unique superkingdom for a specific read. The code above prints the number of different superkingdoms for each sequence read.
+
+In the last 3 reads we even have 3 taxonomic identifiers which do not come from these 4 superkingdoms under exploration.  
+
 \item 
-All the skeletons are stored in the dictionnary "Skeletons". They are DiGraphs.
+All the skeletons are stored in the dictionary "Skeletons". They are DiGraphs.
 \begin{minted}{python}
 # LCA skeletons for each sequence read
 Skeletons = {}
@@ -143,6 +178,6 @@ The number of nodes in each LCA skeleton was printed in previous question in the
 - For the R00090 sequence read: 305 nodes \\
 - For the R00100 sequence read: 344 nodes \\
 
-\item Same answer as in question 2 : the root is the LCA for all sequence reads. 
+\item Same answer as in question 2 : the root ('no rank') is the LCA for all sequence reads. 
 \end {enumerate}
 \end{document}

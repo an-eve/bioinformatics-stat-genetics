@@ -1,6 +1,7 @@
 import networkx as nx
 import pandas as pd
 import matplotlib.pyplot as plt
+import pygraphviz as pgv
 
 # Read the data
 file_path = "nodes.dmp"
@@ -123,6 +124,34 @@ for read_id, seq in lineages.items():
 
 print("{The LCAs for each read: \n", LCAs)
 
+#Matching with taxonomy ranks (superkingdoms)
+#2759 -> eukaryota
+#2 -> bacteria
+#10239 -> viruses
+#2157 -> archaea
+sk_matching = {2759: 'eukaryota', 2: 'bacteria', 10239: 'viruses', 2157: 'archaea'}
+
+# Superkingdoms for each read
+Superkingdoms = {}
+for read_id, seq in lineages.items():
+    skingdoms_for_read ={}
+    skingdoms_for_read['others'] = 0
+    for l in seq:
+        if l[1] in sk_matching:
+            if sk_matching[l[1]] in skingdoms_for_read:
+                skingdoms_for_read[sk_matching[l[1]]] += 1
+            else:
+                skingdoms_for_read[sk_matching[l[1]]] = 1
+        else:
+            skingdoms_for_read['others'] += 1
+    Superkingdoms[read_id] = skingdoms_for_read
+print("The Superkingdoms for each read: \n")
+for read_id, sk_number in Superkingdoms.items():
+    print(f"The Superkingdoms for {read_id} read: {Superkingdoms[read_id]}")
+
+
+
+
 # LCA skeletons for each sequence read
 Skeletons = {}
 for read_id, seq in lineages.items():
@@ -147,7 +176,6 @@ for read_id, seq in lineages.items():
 #Drawing for one of the reads
 """
 G = Skeletons['R00010']
-
 pos = nx.spring_layout(G)
 
 plt.figure(figsize=(10, 8))
@@ -157,3 +185,16 @@ plt.show
 #plt.savefig("LCA_R00010.png")
 #plt.close()
 """
+
+#Drawing all of them
+from networkx.drawing.nx_pydot import graphviz_layout
+import matplotlib.pyplot as plt
+G = nx.DiGraph()
+for read_id, graph in Skeletons.items():
+    pos = graphviz_layout(graph, prog="dot")
+    plt.figure(figsize=(10, 8))
+    nx.draw(graph, pos)
+    plt.title(read_id)
+    plt.savefig(f"LCA_{read_id}.png")
+    plt.close()
+
