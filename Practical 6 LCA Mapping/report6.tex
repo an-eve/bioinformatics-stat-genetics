@@ -1,0 +1,240 @@
+\documentclass[12 pt,a4paper]{article}
+\usepackage{listings}
+\usepackage{mathptmx}
+\usepackage{savetrees}
+\usepackage{minted}
+\title{Practical 6: LCA Mapping}
+\author{Anna Putina and Marine Mazeau}
+\date{23/10/2023, submission deadline 30/10/2023}
+\begin{document}
+\maketitle
+The code below will be used in every questions. It reads the data and creates the graph, and then the restricted graph which we will be working on. The last part (that creates the skeleton tree for each of the sequence reads) was modified to remove "useless" nodes (which wasn't done in lab 5).
+\setminted{autogobble=true, breaklines=true}
+\begin{minted}{python}
+import networkx as nx
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Creation of the restricted graph that represents the NCBI taxonomy 
+
+# Read the data
+file_path = "nodes.dmp"
+df = pd.read_csv(file_path, delimiter = r"\s+\|\s+", usecols=[0, 1, 2], engine = "python", header=None, names = ["child", "parent", "rank"]) 
+print('The head of the dataframe: \n', df.head())
+
+# Add ranks
+attrs = dict(zip(df['child'], df['rank']))
+
+# Create the graph
+G = nx.from_pandas_edgelist(df, source='parent', target='child', create_using=nx.DiGraph())
+nx.set_node_attributes(G, attrs, name="rank")
+
+# Check self-loops and remove these edges
+G.remove_edge(1,1)
+
+valid_ranks = ["superkingdom", "phylum", "class", "order", "family", "genus", "species"]
+
+# Nodes to remove
+not_nodes = [node for node, attrs in G.nodes(data=True) if not attrs['rank'] in valid_ranks]
+
+restricted_taxonomy = G.copy()
+restricted_taxonomy.add_edge(1,1)
+
+def delete_nodes_preserve_neighbors(graph, nodes_to_delete):
+    for node in nodes_to_delete:
+        list_succes = list(graph.successors(node)) 
+        list_pred = list(graph.predecessors(node))
+        if node != 1:
+            graph.remove_node(node)
+        for source in list_pred:
+            for target in list_succes:
+                if source != target and not graph.has_edge(source, target):
+                    graph.add_edge(source, target)
+
+# We keep the node 1 (root) in order to have a structure of the tree 
+
+delete_nodes_preserve_neighbors(restricted_taxonomy, not_nodes)
+restricted_taxonomy.remove_edge(1,1)
+
+# Read the mappings of sequence reads to NCBI taxonomic identifiers
+mapping_file = 'mapping.txt'
+mapping = {}
+
+with open(mapping_file, 'r') as file:
+    for line in file:
+        parts = line.strip().split()
+        read_id = parts[0]
+        taxonomic_nodes = [int(node) for node in parts[1:]]  # Convert nodes to integers
+        mapping[read_id] = taxonomic_nodes
+
+# Define a function to find the full lineage of a taxonomic node
+def find_full_lineage(taxonomy_graph, node):
+    lineage = []
+    while node in taxonomy_graph:
+        lineage.append(node)
+        parents = list(taxonomy_graph.predecessors(node))
+        if not parents:
+            break
+        node = parents[0]
+    return lineage
+
+# Full lineage of every node of every readID is stored in the dictionnary lineages
+lineages = {}
+for read_id, taxonomic_nodes in mapping.items():
+    seq = []
+    for node in taxonomic_nodes:
+        full_lineage = find_full_lineage(restricted_taxonomy, node)
+        full_lineage.reverse()
+        seq.append(full_lineage)
+    lineages[read_id] = seq
+
+
+# LCAs for each read
+LCAs = {}
+for read_id, seq in lineages.items():
+    min_length = min(len(lst) for lst in seq) 
+    lst1 = seq[0]
+    all_same = all(lst1[0] == lst[0] for lst in seq[1:]) #this value is always True (the root)
+    i = 0
+    while all_same and (i+1) < min_length:
+        LCAs[read_id] = lst1[i]
+        all_same = all(lst1[i+1] == lst[i+1] for lst in seq[1:])
+
+# LCA skeletons for each sequence read
+Skeletons = {}
+for read_id, seq in lineages.items():
+    # Create a set of all unique nodes
+    all_nodes = {item for sublist in seq for item in sublist}
+
+    # Construct a directed graph (DAG)
+    G = nx.DiGraph()
+    G.add_nodes_from(all_nodes)
+
+    # Connect nodes in the lineages
+    for lineage in seq:
+        for i in range(len(lineage) - 1):
+            G.add_edge(lineage[i], lineage[i+1])
+    Skeletons[read_id] = G
+
+# Remove "useless" nodes
+for read_id, G in Skeletons.items():
+    # Create a list of nodes with out_degree 1 ("useless")
+    nodes_to_remove = [node for node in G if G.out_degree(node) == 1]
+    delete_nodes_preserve_neighbors(G, nodes_to_remove)
+    
+    # Now, G should contain the modified DAG with "useless" nodes removed
+    Skeletons[read_id] = G
+    
+    # The number of nodes
+    print(f"For the {read_id} sequence read: ")
+    print('The number of nodes: ', Skeletons[read_id].number_of_nodes())
+\end{minted}
+
+\begin{enumerate}
+\item
+This is just about finding the Lowest Common Ancestor for each sequence read. We already found them in question 2 of lab 5 : the LCA for each read is the root (taxonomic id = 1).
+\item
+As all the LCA mappings are the root, the highest rank is "no rank" (all ranks are the same).
+\item 
+As all the LCA mappings are the root, the lowest rank is "no rank" (all ranks are the same).
+\item 
+\begin{minted}{python}
+# the optimal (F-measure) taxonomic assignment for each sequence read
+
+# Function to count leaves below a node
+def count_leaves_below_node(tree, node):
+    descendants = nx.descendants(tree, node)
+    num_leaves = sum(1 for descendant in descendants if tree.out_degree(descendant) == 0)
+    return num_leaves
+
+# Leaves below every node in every skeleton for skeletons
+count_leaves_skeleton={}
+for read_id, graph in Skeletons.items():
+    count_for_skeleton = {}
+    for node in graph:
+        if graph.out_degree(node) > 0:
+            count_for_skeleton[node] = count_leaves_below_node(graph, node)
+    count_leaves_skeleton[read_id] = count_for_skeleton
+
+# Leaves below every node in every skeleton for taxonomy
+count_leaves_taxonomy={}
+for read_id, graph in Skeletons.items():
+    for node in graph:
+        if not(node in count_leaves_taxonomy) and (graph.out_degree(node) > 0):
+            count_leaves_taxonomy[node] = count_leaves_below_node(restricted_taxonomy, node)
+
+# We don't take leaves into consideration, F-score is zero for them
+
+# F-score for every node in every skeleton    
+f_score={}
+for read_id, graph in Skeletons.items():
+    f_score_skeleton = {}
+    for node in graph:
+        if graph.out_degree(node) > 0:
+            tp = count_leaves_skeleton[read_id][node]
+            fn = count_leaves_skeleton[read_id][1] - tp
+            fp = count_leaves_taxonomy[node] - tp
+            f_score_skeleton[node] = 2*tp/(2*tp+fp+fn) 
+    f_score[read_id] = f_score_skeleton 
+
+# Nodes with max F-score for every skeleton     
+f_score_max = {read_id: max(scores, key=lambda key: scores[key]) for read_id, scores in f_score.items()}
+
+# Their ranks
+f_score_max_ranks = {read_id: restricted_taxonomy.nodes[node]['rank'] for read_id, node in f_score_max.items()}
+\end{minted}
+
+Here is the results for the optimal (in terms of the F-measure) taxonomic assignments for each sequence read: \\
+
+
+\textbf{Taxonomic ids} : 
+
+'R00010': 7088, 
+
+'R00020': 7100, 
+
+'R00030': 7458, 
+
+'R00040': 953, 
+
+'R00050': 10193, 
+
+'R00060': 7100, 
+
+'R00070': 384774, 
+
+'R00080': 4747, 
+
+'R00090': 337673, 
+
+'R00100': 9397 \\
+
+\textbf{Taxonomic ranks} : 
+
+'R00010': 'order', 
+
+'R00020': 'family', 
+
+'R00030': 'family', 
+
+'R00040': 'genus',
+
+'R00050': 'family', 
+
+'R00060': 'family', 
+
+'R00070': 'genus',
+
+'R00080': 'family', 
+
+'R00090': 'family', 
+
+'R00100': 'order'
+
+\item 
+In question 4, we found the optimal taxonomic assignment for each sequence read. Among all of them, the highest taxonomic rank is : order. 
+
+\item 
+In question 4, we found the optimal taxonomic assignment for each sequence read. Among all of them, the lowest taxonomic rank is : genus.
+\end {enumerate}
+\end{document}
