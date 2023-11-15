@@ -1,1 +1,364 @@
+---
+title: "Practical 1"
+subtitle: "Statistical Genetics"
+author: 
+  - "Anna Putina"
+  - "Marine Mauzeau"
+professor: "Marta Castellano"
+year: "`r format(Sys.Date(), '%Y')`"
+output: pdf_document
+date: "2023-11-14"
+---
+
+```{r echo = T, results = 'hide', message=FALSE, warning=FALSE}
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(ggplot2)
+library(tidyverse)
+```
+
+# SNP dataset
+
+The file TSICHR22RAW.raw contains genotype information of individuals from Tuscany in Italy, taken from the 1,000 Genomes project. The datafile contains all single nucleotide polymorphisms on chromosome 22 for which complete information is available.
+Load this data into the R environment, with the read.table instruction. The first six columns contain non-genetical information. Create a dataframe that only contains the genetic information that is in and beyond the 7th column. Notice that the genetic variants are identifed by an “rs” identifier. The genetic data is coded in the (0, 1, 2) format with 0=AA, 1=AB, 2=BB.
+
+```{r}
+data <- read.table("TSICHR22RAW.raw")
+colnames(data) <- data[1,]
+data <- data[-1, -c(1:6)]
+data <- as.data.frame(sapply(data, as.numeric))
+```
+
+## Question 1
+
+### How many variants are there in this database? What percentage of the data is missing?
+
+```{r}
+ncol(data)
+
+NA.counter <- sum(is.na.data.frame(data))
+NA.counter
+
+NA.percentage <- NA.counter*100/prod(dim(data))
+NA.percentage
+```
+
+There are 20649 columns in this dataframe, i.e. 20649 variants. There are 4184 missing values in this data, i.e. 0.199% of the data. We could remove rows containing NAs but as we can see in the code below, there is at least 1 NA per row.
+
+```{r}
+rows.has.na <- function(data){
+  for (i in 1:nrow(data)) {
+  if (anyNA(data[i,]) == F){
+    print(i)
+    }
+  }
+  print("All rows contain at least one NA")
+}
+
+rows.has.na(data)
+
+```
+
+We will then replace the NAs by the most frequent value (0, 1 or 2) they belong to.
+
+```{r}
+# computes and returns the most frequent value of a column
+mode <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
+
+# replace na
+data.without.na <- data %>% 
+  mutate_all(funs(ifelse(is.na(.), mode(.), .)))
+```
+
+```{r}
+data <- data.without.na
+```
+
+## Question 2 
+
+### Calculate the percentage of monomorphic variants. Exclude all monomorphics from the database for all posterior computations of the practical. How many variants do remain in your database?
+
+Monomorphic variants are variants that only have one allele, i.e. either only 0 or only 2 in a column of the dataframe means that the variant is monomorphic.
+
+```{r}
+is.not.monomorphic <- function(col){
+  return(!(sum(col) %in% c(0, 2*(nrow(data)))))
+}
+
+data <- data[, sapply(data, is.not.monomorphic)]
+
+nb.variants <- ncol(data)
+nb.variants
+```
+
+After removing all monomorphic variants, there are 18283 variants.
+
+## Question 3 
+
+### Report the genotype counts and the minor allele count of polymorphism rs8138488_C, and calculate the MAF of this variant.
+
+```{r}
+rs8138488_C <- data$rs8138488_C
+
+genotype.counts <- table(rs8138488_C)
+genotype.counts
+
+count.B <- genotype.counts[2] + 2*genotype.counts[3]
+count.B <- count.B[["1"]]
+count.B
+
+tot.nb.alleles <- 2*nrow(data)
+
+MAF.B <- count.B / tot.nb.alleles
+MAF.B 
+
+```
+
+Genotype counts : 
+- 0=AA : 47
+- 1=AB : 47
+- 2=BB : 14
+
+
+The minor allele is B so the minor allele count of polymorphism rs8138488_C is 75.
+The MAF is equal to 0.368.
+
+
+## Question 4 
+
+###  Compute the minor allele frequencies (MAF) for all markers, and make a histogram of it. Does the MAF follow a uniform distribution? What percentage of the markers have a MAF below 0.05? And below 0.01? Can you explain the observed pattern?
+
+```{r}
+compute.MAFs <- function(data){
+
+  MAFs <- c()
+  tot.nb.alleles <- 2*nrow(data)
+
+  for (col_name in colnames(data)) {
+    col <- data[[col_name]]
+
+    count.A <- sum(col == 1) + 2*sum(col == 0)
+    count.B <- 204 - count.A
+    
+    MAFs <- c(MAFs, min(count.A, count.B) / tot.nb.alleles)
+
+  }
+  return(MAFs)
+}
+
+MAFs <- compute.MAFs(data)
+```
+
+```{r}
+par(mfrow = c(2, 1))
+hist(MAFs, main = "Histogram of the MAF", xlab = "MAF", breaks = seq(0, 0.55 , by = 0.1))
+hist(MAFs, main = "Histogram of the MAF", xlab = "MAF", breaks = seq(0, 0.55 , by = 0.01))
+```
+
+If we look at the 1st histogram, it looks like a uniform distribution. However, if we look at it more precisely by increasing the number of breaks (2nd histogram), there are lots of very low values, so we conclude that the MAF doesn't follow a normal distribution.
+
+```{r}
+below.0.05 <- sum(MAFs < 0.05)*100/nb.variants
+below.0.05
+below.0.01 <- sum(MAFs < 0.01)*100/nb.variants
+below.0.01
+```
+
+There are approximately 14.3% of the variants that have a MAF below 0.05.
+There are approximately 4.8% of the variants that have a MAF below 0.01.
+It looks like the most frequent values for MAF are the closest to 0.
+It is normal because we are looking at the proportion of minor allele, which are rare. This can be explained by several factors : 
+- Mutations : Genetic mutations introduce new alleles into a population. If a mutation is rare, it will have a low allele frequency.
+- Natural Selection : if the minor allele is disadvantageous, it may have low allele frequency due to natural selection because the individuals that hold this allele reproduce themselves less than others.
+
+## Question 5 
+
+### Calculate the observed heterozygosity H0, and make a histogram of it. What is, theoretically, the range of variation of this statistic?
+
+```{r}
+compute.all.H0 <- function(data){
+  all.H0 <- c()
+  for (col_name in colnames(data)) {
+  col <- data[[col_name]]
+  all.H0 <- c(all.H0, sum(col == 1)/nrow(data))
+}
+  return(all.H0)
+}
+
+H0 <- compute.all.H0(data)
+
+hist(H0, main = "Histogram of observed heterozygosity", xlab = "observed heterozigosity")
+```
+
+Theoretically, $H_0$ lies between 0 and 1 : 
+- Minimum value (0): If all individuals at a particular locus are homozygous (i.e., have identical alleles), the observed heterozygosity would be 0.
+- Maximum value (1): If all individuals at a particular locus are heterozygous (i.e., have different alleles), the observed heterozygosity would be 1.
+However, this statistic is influenced by many different factors such as the population's history, size, mating patterns, and natural selection, which is why it is more complex than $H_0$'s values following a uniform distribution.
+
+## Question 6 
+
+### Compute for each marker its expected heterozygosity $(H_e)$, where the expected heterozygosity for a bi-allelic marker is defined as $1 - \sum_{i = 1}^{k} 1 - p_i^2$ , where $p_i^2$ is the frequency of the $i^{th}$ allele. Make a histogram of the expected heterozygosity. What is, theoretically, the range of variation of this statistic? What is the average of $H_e$ for this database?
+
+```{r}
+compute.all.He <- function(data){
+  all.He <- c()
+  for (col_name in colnames(data)) {
+  col <- data[[col_name]]
+  
+  count.A <- sum(col == 1) + 2*sum(col == 0)
+  count.B <- 204 - count.A
+  tot.nb.alleles <- 2*nrow(data)
+  
+  pA <- count.A/tot.nb.alleles
+  pB <- count.B/tot.nb.alleles
+  
+  He <- 1-pA*pA-pB*pB
+  
+  all.He <- c(all.He, He)
+}
+  return(all.He)
+}
+
+He <- compute.all.He(data)
+
+hist(He, main = "Histogram of expected heterozygosity", xlab = "expected heterozigosity")
+```
+
+
+
+```{r}
+He.theo <- function(x) 1 - x^2 - (1 - x)^2
+
+curve(He.theo, from = 0, to = 1, col = "blue", xlab = "p", ylab = "f(p)", main = "Graph of theoretical value of the expected heterozygosity ")
+
+```
+
+Theoretically, the range of variation of the expected heterozygosity is between 0 (there is no minor allele) and 0.5 (both alleles have the same frequency).
+
+```{r}
+mean(He)
+```
+
+The average of $H_e$ for this database is 0.311.
+
+
+# STR dataset
+
+```{r  message=FALSE, warning=FALSE}
+library(HardyWeinberg)
+data("NistSTRs")
+```
+
+
+```{r}
+str(NistSTRs)
+```
+
+## Question 1 
+How many individuals and how many STRs contains the database?
+
+```{r}
+dimensions <- dim(NistSTRs)
+
+num_individuals <- dimensions[1]
+
+#two alleles of an individual each STR
+num_strs <- dimensions[2] / 2
+
+cat("Number of individuals:", num_individuals, "\n")
+cat("Number of STRs:", num_strs, "\n")
+```
+
+## Question 2 
+Write a function that determines the number of alleles for a STR. Determine the number
+of alleles for each STR in the database. Compute basic descriptive statistics of the number
+of alleles (mean, standard deviation, median, minimum, maximum).
+
+```{r}
+all_columns <- names(NistSTRs)
+
+odd_columns <- all_columns[c(TRUE, FALSE)]
+even_columns <- all_columns[c(FALSE, TRUE)]
+
+first <- NistSTRs %>% select(all_of(odd_columns)) %>%
+                    rename_with(~str_sub(., end = -3), everything())
+
+second <- NistSTRs %>% select(all_of(even_columns)) %>%
+                    rename_with(~str_sub(., end = -3), everything())
+
+combined_str <- bind_rows(list(first, second))
+
+allele_counts <- combined_str %>%
+  summarise_all(n_distinct)
+
+
+cat("Number of alleles for every STR:\n")
+
+print(allele_counts)
+```
+
+```{r}
+num_alleles <- allele_counts %>%
+                slice(1) %>%
+                unlist()
+
+mean_num_alleles <- mean(num_alleles)
+sd_num_alleles <- sd(num_alleles)
+median_num_alleles <- median(num_alleles)
+min_num_alleles <- min(num_alleles)
+max_num_alleles <- max(num_alleles)
+  
+cat("Descriptive Statistics of the Number of Alleles:\n")
+cat("Mean:", mean_num_alleles, "\n")
+cat("Standard Deviation:", sd_num_alleles, "\n")
+cat("Median:", median_num_alleles, "\n")
+cat("Minimum:", min_num_alleles, "\n")
+cat("Maximum:", max_num_alleles, "\n")
+```
+
+
+## Question 3
+Make a table with the number of STRs for a given number of alleles and present a
+barplot of the number STRs in each category. What is the most common number of alleles
+for an STR?
+
+```{r}
+allele_counts <- allele_counts %>%
+  pivot_longer(everything(), names_to = "STR", values_to = "NumAlleles")
+
+# Table with the count of STRs for each number of alleles
+allele_count_table <- allele_counts %>%
+  group_by(NumAlleles) %>%
+  summarise(Count = n())
+
+# Print the table
+print(allele_count_table)
+
+# Barplot with ggplot2
+ggplot(allele_count_table, aes(x = factor(NumAlleles), y = Count)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(x = "Number of Alleles", y = "Number of STRs", 
+        title = "Number of STRs for Each Number of Alleles") +
+  theme_minimal()
+
+# Find the most common number of alleles
+most_common_alleles <- allele_count_table %>%
+  filter(Count == max(Count))
+
+# Print the most common number of alleles
+cat("Most common number of alleles for an STR:", most_common_alleles$NumAlleles, "\n")
+```
+
+## Question 4
+Compute the expected heterozygosity for each STR. Make a histogram of the expected
+heterozygosity over all STRS. Compute the average expected heterozygosity over all STRs.
+
+```{r}
+sum_str <- NistSTRs %>%
+  summarise(across(everything(), sum))
+```
 
