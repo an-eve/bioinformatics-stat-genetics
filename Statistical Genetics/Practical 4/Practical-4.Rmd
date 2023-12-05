@@ -1,1 +1,335 @@
+---
+title: "Practical 4"
+subtitle: "Statistical Genetics: Population Substructure"
+author: 
+  - "Anna Putina"
+  - "Marine Mauzeau"
+professor: "Marta Castellano"
+year: "`r format(Sys.Date(), '%Y')`"
+output: pdf_document
+date: "2023-12-04"
+---
 
+```{r echo = T, results = 'hide', message=FALSE, warning=FALSE}
+library(MASS)
+library(data.table)
+```
+
+```{r}
+data.geno <- fread("Chr21.dat")
+data.geno <- data.geno[,-c(1:6)]
+```
+
+## Question 1 :
+
+### How many variants are there in this database? What percentage of the data is missing?
+
+```{r}
+NA.counter <- sum(is.na(data.geno))
+NA.percentage <- NA.counter*100/prod(dim(data.geno))
+```
+
+There are `r ncol(data.geno)` variants in this data base.
+
+The percentage of missing data in this database: `r NA.percentage` %.
+
+## Question 2 :
+
+### Compute the Manhattan distance matrix between the individuals (which is identical to the Minkowsky distance with parameter $\lambda$ = 1) using R function dist. Include a submatrix of dimension 5 by 5 with the distances between the first 5 individuals in your report.
+
+```{r}
+manhattan.dist <- dist(data.geno, method = "manhattan")
+sub.mat <- dist(data.geno[c(1:5),], method = "manhattan")
+```
+
+The submatrix of dimension 5 by 5 with the distances between the first 5 individuals: 
+
+```{r}
+print(sub.mat)
+```
+
+## Question 3 :
+
+### How does the Manhattan distance relate to the allele sharing distance?
+
+Concerning 2 different individuals and 1 variant : 
+
+* if they have 2 shared alleles : the absolute value of the difference of their genetic data is 0 (0-0 or 1-1 or 2-2).
+
+* if they have 1 shared allele : the absolute value of the difference of their genetic data is 1 (|2-1|, |1-2|, |0-1|, |1-0|).
+
+* if they  have 0 shared allele : the absolute value of the difference of their genetic data is 2 (|2-0| or |0-2|).
+
+Thus, thanks to the definitions of Manhattan distance matrix and Allele sharing distance matrix, there is only a factor k between the 2 matrices : 
+
+Manhattan matrix = number of variants $\times$ allele sharing matrix = `r ncol(data.geno)` $\times$  allele sharing matrix.
+
+
+## Question 4 :
+
+### Apply metric multidimensional scaling (cmdscale) with two dimensions, k = 2, using the Manhattan distance matrix and include the map in your report. Do you think the data come from one homogeneous human population? If not, how many subpopulations do you think the data might come from, and how many individuals pertain to each suppopulation?
+
+```{r}
+mds.res <- cmdscale(manhattan.dist, list. = TRUE, x.ret = TRUE)
+
+x <- mds.res$points[, 1]
+y <- mds.res$points[, 2]
+plot(x, y, col = ifelse(x > 0, "red", "blue"), xlab="Dimension 1",
+           ylab = "Dimension 2", main = "Metric MDS with Manhattan Distance")
+```
+
+According to the plot above, the data doesn't seem to come from one homogeneous population. 
+There clearly seem to be 2 subpopulations : we can easily identify 2 clusters.
+
+```{r}
+# To compute the number of individuals for each class
+length(x[x > 0])
+length(x[x < 0])
+```
+
+There are `r length(x[x > 0])` individuals in the red cluster, and `r length(x[x < 0])` in the blue one.
+
+## Question 5 :
+
+### What is the goodness-of-fit of the two-dimensional approximation to your distance matrix? Explain which criterium you have used.
+
+```{r}
+mds.res$GOF[1]
+```
+
+We used criterium $g = \dfrac{\sum_{j=1}^{2} \lambda_j} {\sum_{j=1}^{203} \lvert \lambda_j \rvert}$. 
+We get a goodness-of-fit equal to `r mds.res$GOF[1]`.
+
+## Question 6 :
+
+### Make a plot of the estimated distances (according to your two-dimensional map of individuals) versus the observed distances. What do you observe? Regress estimated distances on observed distances and report the coefficient of determination of the regression (you can use the function lm).
+
+```{r}
+estimated.dist <- dist(mds.res$points, method = "manhattan")
+
+plot(manhattan.dist, estimated.dist, xlab = "Observed distances", ylab = "Estimated distances", 
+                     main = "Comparison of observed and estimated distances", cex = 0.5)
+
+reg.lin <- lm(estimated.dist ~ manhattan.dist)
+
+abline(reg.lin, col = "red")
+abline(a = 0, b = 1, col = "blue", lty = 2)
+```
+
+We observe that there hardly seems to be a linear relationship between observed and estimated distances. The 2 clusters are still visible here.
+
+```{r}
+summary(reg.lin)
+```
+
+The coefficient of determination of the regression is quite high : 0.8241. 
+It means that more than 82% of the data fit the model.
+
+We have a linear dependance, but there is a systematic
+bias in under-estimating short distances.
+
+## Question 7 : 
+
+### We now try a (two-dimensional) non-metric multidimensional scaling using the isoMDs function that you will find in MASS library. We use a random initial configuration and, for the sake of reproducibility, make this random initial configuration with the instructions: set.seed(12345) and init <- scale(matrix(runif(m*n),ncol=m),scale=FALSE) where n represents the sample size and m represents the dimensionality of the solution. Make a plot of the two-dimensional solution. Do the results support that the data come from one homogeneous population?
+
+```{r}
+set.seed(12345)
+m <- 2
+n <- 203
+init <- scale(matrix(runif(m*n), ncol=m), scale=FALSE)
+nm.mds.res <- isoMDS(manhattan.dist, y = init)
+x <- nm.mds.res$points[, 1]
+y <- nm.mds.res$points[, 2]
+plot(x, y, col = "blue", main = "Non Metric MDS with Manhattan Distance", 
+                           xlab = "Dimension 1", ylab = "Dimension 2")
+```
+
+Here, the results support that the data come from one homogeneous population : 
+we cannot see any visible cluster.
+
+## Question 8 : 
+
+### Try some additional runs of the two-dimensional isoMDS with different initial configurations. Make a plot of the solutions and report the STRESS for each of them. What do you observe?
+
+#### The 2d attempt 
+
+```{r}
+init <- scale(matrix(runif(m*n), ncol=m), scale=FALSE)
+nm.mds.res <- isoMDS(manhattan.dist, y = init)
+x <- nm.mds.res$points[, 1]
+y <- nm.mds.res$points[, 2]
+plot(x, y, col = "blue", main = "Non Metric MDS with Manhattan Distance", 
+                           xlab="Dimension 1", ylab = "Dimension 2")
+```
+
+#### The 3d attempt 
+
+```{r}
+init <- scale(matrix(runif(m*n), ncol=m), scale=FALSE)
+nm.mds.res <- isoMDS(manhattan.dist, y = init)
+x <- nm.mds.res$points[, 1]
+y <- nm.mds.res$points[, 2]
+plot(x, y, col = "blue", main = "Non Metric MDS with Manhattan Distance", 
+                           xlab="Dimension 1", ylab = "Dimension 2")
+```
+
+#### The 4th attempt
+
+```{r}
+init <- scale(matrix(runif(m*n), ncol=m), scale=FALSE)
+nm.mds.res <- isoMDS(manhattan.dist, y = init)
+x <- nm.mds.res$points[, 1]
+y <- nm.mds.res$points[, 2]
+plot(x, y, col = "blue", main = "Non Metric MDS with Manhattan Distance", 
+                           xlab="Dimension 1", ylab = "Dimension 2")
+```
+
+#### The 5th attempt
+
+```{r}
+init <- scale(matrix(runif(m*n), ncol=m), scale=FALSE)
+nm.mds.res <- isoMDS(manhattan.dist, y = init)
+x <- nm.mds.res$points[, 1]
+y <- nm.mds.res$points[, 2]
+plot(x, y, col = "blue", main = "Non Metric MDS with Manhattan Distance", 
+                           xlab="Dimension 1", ylab = "Dimension 2")
+```
+
+#### The 6th attempt
+
+```{r}
+init <- scale(matrix(runif(m*n), ncol=m), scale=FALSE)
+nm.mds.res <- isoMDS(manhattan.dist, y = init)
+x <- nm.mds.res$points[, 1]
+y <- nm.mds.res$points[, 2]
+plot(x, y, col = "blue", main = "Non Metric MDS with Manhattan Distance", 
+                           xlab="Dimension 1", ylab = "Dimension 2")
+```
+
+
+The plots we have obtained demonstrate a strong dependence of 
+the results on the initial configurations. As observed, some 
+configurations exhibit clusterization, while others do not, even 
+for the same dataset.
+
+## Question 9 :
+
+### Compute the stress for a 1, 2, 3, . . . , 50-dimensional solution. How many dimensions are necessary to obtain a good representation with a stress below 10? Make a plot of the stress against the number of dimensions.
+
+```{r}
+set.seed(12345)
+max_dimensions <- 50
+stress_values <- numeric(max_dimensions)
+
+for (m in 1:max_dimensions) {
+  init <- scale(matrix(runif(m*n), ncol=m), scale=FALSE)
+  nm.mds.res <- isoMDS(manhattan.dist, y = init, k = m, trace = FALSE)
+  stress_values[m] <- nm.mds.res$stress
+}
+
+good_dimensions <- which(stress_values < 10)[1]
+
+plot(1:max_dimensions, stress_values, type = "b", 
+     xlab = "Number of Dimensions", ylab = "Stress", 
+     main = "Stress vs. Number of Dimensions")
+
+abline(h = 10, col = "red", lty = 2)
+
+abline(v = good_dimensions, col = "blue", lty = 2)
+text(good_dimensions + 2, 12, paste("m =", good_dimensions), col = "blue")
+```
+
+**`r good_dimensions` dimensions** are necessary to obtain a good representation 
+with a stress below 10.
+
+## Question 10 : 
+
+### Run the two-dimensional isoMDS a hundred times, each time using a different random initial configuration using the instructions above. Report the stress of the best and the worse run, and plot the corresponding maps. Compare your results to the metric MDS and comment on your findings.
+
+```{r}
+set.seed(12345)
+num_runs <- 100
+m <- 2
+
+best_stress <- Inf
+worst_stress <- -Inf
+best_run <- NULL
+worst_run <- NULL
+
+for (i in 1:num_runs) {
+  init <- scale(matrix(runif(m * n), ncol = m), scale = FALSE)
+  nm.mds.res <- isoMDS(manhattan.dist, y = init, trace = FALSE)
+  current_stress <- nm.mds.res$stress
+
+  if (current_stress < best_stress) {
+    best_stress <- current_stress
+    best_run <- nm.mds.res$points
+  }
+  
+  if (current_stress > worst_stress) {
+    worst_stress <- current_stress
+    worst_run <- nm.mds.res$points
+  }
+}
+
+cat("Best Run Stress:", best_stress, "\n")
+cat("Worst Run Stress:", worst_stress, "\n")
+
+
+par(mfrow = c(1, 2))
+
+plot(best_run[, 1], best_run[, 2], col = "blue", 
+     main = "Best Non-Metric MDS", xlab = "Dimension 1", ylab = "Dimension 2")
+
+plot(worst_run[, 1], worst_run[, 2], col = "red", 
+     main = "Worst Non-Metric MDS", xlab = "Dimension 1", ylab = "Dimension 2")
+```
+
+In the worst case scenario for Non-Metric MDS, clusterization is 
+not observed. However, for both the best-performing Non-Metric 
+MDS and Metric MDS, we observe clusterization. Consequently, 
+Metric MDS appears to be more stable in these terms.
+
+In the case of the same dataset and k=2, we 
+noticed that for the Metric MDS the two clusters are segregated along only one 
+dimension — either positive or negative x. On the contrary, in 
+the case of Non-Metric MDS, we found that the clusters are 
+separated along both dimensions.
+
+## Question 11 : 
+
+### Compute the correlation matrix between the first two dimensions of the metric MDS and the two-dimensional solution of your best non-metric MDS. Comment your findings.
+
+```{r}
+correlation_matrix <- cor(mds.res$points, best_run)
+print(correlation_matrix)
+
+par(mfrow = c(1, 2))
+
+plot(mds.res$points[, 1], mds.res$points[, 2], col = "blue", 
+     main = "Metric MDS", xlab = "Dimension 1", ylab = "Dimension 2")
+
+plot(best_run[, 1], best_run[, 2], col = "red", 
+     main = "Best Non-Metric MDS", 
+     xlab = "Dimension 1", ylab = "Dimension 2")
+```
+
+As mentioned earlier, we observe a correlation between 
+dimensions in Metric MDS but not in Non-Metric MDS.
+
+The difference in the dimensionality of clusters between Metric 
+and Non-Metric MDS may be attributed to factors beyond the choice 
+of the distance metric, especially considering that the same 
+Manhattan metric was utilized in both cases. It's possible that 
+other aspects of the algorithms, such as the underlying 
+optimization procedures or the treatment of dissimilarities, 
+contribute to the observed distinctions.
+
+In this context, while Metric MDS relies on a distance metric 
+to preserve original dissimilarities and might result in a 
+one-dimensional separation in certain cases, Non-Metric MDS 
+prioritizes maintaining the order of dissimilarities over their 
+exact magnitudes, potentially leading to a more distributed 
+separation across multiple dimensions. Further investigation 
+into the specific intricacies of the algorithms could shed light 
+on the observed differences in cluster dimensionality.
