@@ -1,0 +1,182 @@
+---
+title: "Practical 5"
+subtitle: "Statistical Genetics: Genetic Association Analysis"
+author: 
+  - "Anna Putina"
+  - "Marine Mazeau"
+professor: "Marta Castellano"
+year: "`r format(Sys.Date(), '%Y')`"
+output: pdf_document
+date: "2023-12-10"
+---
+
+```{r echo = T, results = 'hide', message=FALSE, warning=FALSE}
+library(stats)
+library(HardyWeinberg)
+```
+
+A particular SNP is supposed to be involved in Alzheimer's disease. A case control study has been
+performed, obtaining the following results:
+
+```{r}
+X <- matrix(c(112, 278, 150, 206, 348, 150), byrow=TRUE, ncol=3)
+colnames(X) <- c("AA", "Aa", "aa")
+rownames(X) <- c("Cases", "Controls")
+print(X)
+```
+
+## Question 1:
+
+### Perform the alleles test for this data set. Provide the p-value and the odds ratio and comment on the results.
+
+Alleles table:
+```{r}
+Y <- cbind(2*X[,1]+X[,2], 2*X[,3]+X[,2])
+colnames(Y) <- c("A","a")
+print(Y)
+```
+
+```{r}
+allele_test <- chisq.test(Y, correct=FALSE)
+fisher_test <- fisher.test(Y)
+
+p_value <- allele_test$p.value
+odds_ratio <- fisher_test$estimate
+conf_int <- fisher_test$conf.int
+
+cat("P-value chisq test:", p_value, "\n")
+cat("Odds Ratio:", odds_ratio, "\nwith the confidence interval:", conf_int)
+```
+
+P-value of chi square test is lower than 0.05 so we can conclude that the association between alleles and case-control status is statistically significant.
+
+Odds ratio of the fisher test is different from 1, i.e. we can reject the null hypothesis that the probability of A is the same in both cases and controls groups. As the odds ratio is lower than 1, it means that the odds of disease with allele a are higher than with allele A.
+
+Thanks to these alleles tests, we can say that there seems to be a dependance between the allele's value and the presence of the disease. It seems that allele a leads more often to the presence of the disease than allele A. Disease is 0.741 more frequent with allele A.
+
+## Question 2:
+
+### Test for association using a codominant, a dominant and a recessive model. Provide the p-values for all the tests and comment on the results.
+
+**Codominant model**
+
+```{r}
+codom_chisq <- chisq.test(X)
+codom_fisher <- fisher.test(X)
+
+cat("P-value for chi-squared test:", codom_chisq$p.value, "\n")
+cat("P-value for fisher test:", codom_fisher$p.value, "\n")
+```
+
+P-values are both lower than 0.05 : we reject the null hypothesis that the probability of disease with all the genotypes is the same.
+
+**Dominant model : A is dominant **
+
+```{r}
+X.dom <- cbind(X[,1]+X[,2], X[,3])
+colnames(X.dom) <- c("AA or Aa", "aa")
+print(X.dom)
+```
+
+```{r}
+dom_chisq <- chisq.test(X.dom)
+dom_fisher <- fisher.test(X.dom)
+
+cat("P-value for chi-squared test:", dom_chisq$p.value, "\n")
+cat("P-value for fisher test:", dom_fisher$p.value, "\n")
+```
+
+P-values are both lower than 0.05 : we reject the null hypothesis that the probability of disease does not depend on A.
+
+**Recessive model : A is recessive**
+
+```{r}
+X.rec <- cbind(X[,1], X[,2]+X[,3])
+colnames(X.rec) <- c("AA", "Aa or aa")
+print(X.rec)
+```
+
+```{r}
+rec_chisq <- chisq.test(X.rec)
+rec_fisher <- fisher.test(X.rec)
+
+cat("P-value for chi-squared test:", rec_chisq$p.value, "\n")
+cat("P-value for fisher test:", rec_fisher$p.value, "\n")
+```
+
+P-values are both lower than 0.05 : we reject the null hypothesis that the probability of disease does not depend on a.
+
+As a conclusion, the probability of the disease seems to depend on both alleles a and A, and the probability of the disease among all genotypes is different.
+
+## Question 3:
+
+### Plot the risk of disease as a function of the number of m alleles. Comment on the results. Which model seems most appropriate?
+
+```{r}
+proportions_codom_cases <- X["Cases", ] / colSums(X)
+
+plot(c(0,1,2), proportions_codom_cases, pch = 16,
+     main = "Codominant model",
+     xlab = "Genotype", ylab = "Risk", ylim = c(0, 1), xaxt = "n")
+lines(c(0,1,2), proportions_codom_cases, type = "l")
+axis(1, at = 0:2, labels = c("AA", "Aa", "aa"))
+```
+
+
+
+```{r}
+proportions_dom_cases <- X.dom["Cases", ] / colSums(X.dom)
+
+proportions_dom_cases <- c(proportions_dom_cases[1], proportions_dom_cases)
+
+plot(c(0,1,2), proportions_dom_cases, pch = 16,
+     main = "Dominant model",
+     xlab = "Genotype", ylab = "Risk", ylim = c(0, 1), xaxt = "n")
+lines(c(0,1,2), proportions_dom_cases, type = "l")
+axis(1, at = 0:2, labels = c("AA", "Aa", "aa"))
+```
+
+```{r}
+proportions_rec_cases <- X.rec["Cases", ] / colSums(X.rec)
+
+proportions_rec_cases <- c(proportions_rec_cases, proportions_rec_cases[2])
+
+plot(c(0,1,2), proportions_rec_cases, pch = 16,
+     main = "Recessive model",
+     xlab = "Genotype", ylab = "Risk", ylim = c(0, 1), xaxt = "n")
+lines(c(0,1,2), proportions_rec_cases, type = "l")
+axis(1, at = 0:2, labels = c("AA", "Aa", "aa"))
+```
+
+```{r}
+proportions_rec_cases <- X.rec["Cases", ] / colSums(X.rec)
+
+proportions_rec_cases <- c(proportions_rec_cases, proportions_rec_cases[2])
+
+plot(c(0,1,2), proportions_rec_cases, pch = 16,
+     main = "Recessive model",
+     xlab = "Genotype", ylab = "Risk", ylim = c(0, 1), xaxt = "n")
+lines(c(0,1,2), proportions_rec_cases, type = "l")
+axis(1, at = 0:2, labels = c("AA", "Aa", "aa"))
+```
+
+## Question 4: Perform Armitage trend test for this data set. Does the null hypothesis ${\beta}_1 = 0$ hold? Comment on your response.
+
+```{r}
+trend_test <- prop.trend.test(X[1,], colSums(X))
+
+cat("Chi-squared Test Statistic:", trend_test$statistic, "\n")
+cat("P-value:", trend_test$p.value, "\n")
+```
+
+P-value is lower than 0.05 : we reject the null hypothesis that the probability of disease is the same with different number of A.
+
+## Question 5: Is there evidence for association of this marker with the disease? Argument your response.
+
+The result of chi-square test and odds ratio of fisher test confirmed that there is an association between the marker and the disease, and that the odds of disease with allele a are higher than with allele A.
+
+### NOT FINISHED
+
+
+
+
