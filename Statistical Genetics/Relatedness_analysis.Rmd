@@ -1,0 +1,121 @@
+---
+title: "Practical 6"
+subtitle: "Statistical Genetics: Relatedness analysis"
+author: 
+  - "Anna Putina"
+  - "Marine Mazeau"
+professor: "Marta Castellano"
+year: "`r format(Sys.Date(), '%Y')`"
+output: pdf_document
+date: "2023-12-16"
+---
+
+```{r echo = T, results = 'hide', message=FALSE, warning=FALSE}
+library(genetics)
+library(data.table)
+library(SNPRelate)
+```
+
+
+## Question 1 : Load the YRI06.raw file into the R environment. How many individuals and how many SNPs are there in the database? What percentage of the data is missing?
+
+```{r}
+data <- fread("YRI6.raw")
+gen.data <- data[,-c(1:6)]
+NA.counter <- sum(is.na(gen.data))
+NA.percentage <- NA.counter*100/prod(dim(gen.data))
+```
+
+There are `r nrow(gen.data)` individuals and `r ncol(gen.data)` SNPs in this database.
+
+The percentage of missing data in this database: `r NA.percentage` %.
+
+## Question 2 : Compute, for each pair of individuals (and report the first 5), the mean m of the number of alleles shared and the standard deviation s of the number of alleles shared.
+
+```{r eval = FALSE}
+compute_shared_alleles <- function(individual1, individual2) {
+  shared_alleles <- mean(2 - abs(individual1 - individual2))
+  return(shared_alleles)
+}
+shared_alleles_matrix <- matrix(NA, nrow = nrow(gen.data), ncol = nrow(gen.data))
+
+sum(2 - abs(gen.data[1, ] - gen.data[1, ]))
+
+# Compute the number of shared alleles for each pair of individuals
+for (i in 1:nrow(gen.data)) {
+  for (j in 1:nrow(gen.data)) {
+    shared_alleles_matrix[i, j] <- compute_shared_alleles(gen.data[i, ], gen.data[j, ])
+  }
+}
+
+shared_alleles_matrix <- shared_alleles_matrix
+```
+
+It was too long to compute, so we switched to Python at this point.
+
+```{r eval = FALSE}
+write.csv(gen.data, file = "gen_data.csv", row.names = TRUE)
+write.csv(data, file = "data.csv", row.names = TRUE)
+```
+
+\newpage
+
+## Question 6: Use the package SNPRelate to estimate the IBD probabilities, and plot the probabilities of sharing 0 and 1 IBD alleles (k0 and k1) for all pairs of individuals. Use the pedigree information of the `YRI06.raw` file to label the data points in the scatterplot (same as before, one colour for parent-offspring relationship and another colour for unrelated individuals).
+
+```{r}
+# Create a gds file
+snpgdsCreateGeno("test2.gds", genmat = as.matrix(gen.data),
+                  sample.id = data$IID, snp.id = colnames(gen.data),
+                  snpfirstdim=FALSE)
+# Open the GDS file
+genofile <- snpgdsOpen("test2.gds")
+# LD pruning
+set.seed(10)
+snpset <- snpgdsLDpruning(genofile, ld.threshold=0.2)
+snpset.id <- unlist(unname(snpset))
+# Estimate IBD coefficients
+ibd <- snpgdsIBDMLE(genofile, maf=0.05, missing.rate=0.05,snp.id=snpset.id, num.thread=2)
+```
+
+```{r fig.width=5, fig.height=6, fig.align='center'}
+# Make a data.frame
+ibd.coeff <- snpgdsIBDSelection(ibd)
+
+# Parent-offspring relationship info
+ped_info <- data[, c(2, 3, 4)]
+
+col_id1 <- ibd.coeff$ID1
+col_id2 <- ibd.coeff$ID2
+
+parent_offspring <- function(id1, id2) {
+  if (id2 %in% ped_info[ped_info$IID == id1, c("PAT", "MAT")]) {
+    relationship <- TRUE
+  } else if (id1 %in% ped_info[ped_info$IID == id2, c("PAT", "MAT")]) {
+    relationship <- TRUE
+  } else {
+    relationship <- FALSE
+  }
+  return(relationship)
+}
+
+result_relationship <- mapply(parent_offspring, col_id1, col_id2)
+
+# Create a vector of colors based on family relationship
+colors <- ifelse(result_relationship, "red","blue")
+
+# Plot
+plot(ibd.coeff$k0, ibd.coeff$k1, xlim=c(0,1), ylim=c(0,1),
+     xlab="k0", ylab="k1", main="YRI samples (MLE)", col=colors)
+lines(c(0,1), c(1,0), lty=2)
+```
+
+## Question 7: Do you think the family relationships between all individuals were correctly specified?
+
+The family relationships between all individuals appear to have been correctly specified (*except for 1 misidentification with k0 > 0*). 
+
+This is evident in the plot where k0 = 0 and k1 > 0.5, indicating a high probability of sharing 
+1 IBD allele. These patterns align with expectations for parent-offspring relationships, 
+providing strong support for the accuracy of the specified family relationships. The visual 
+representation in the plot reinforces the consistency between the estimated IBD 
+coefficients and the expected relationships, further validating the correctness of the 
+familial information in the dataset.
